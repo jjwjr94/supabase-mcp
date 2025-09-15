@@ -13,8 +13,5 @@ services:
         value: production
       - key: PORT
         value: 10000
-    secrets:
-      - key: SUPABASE_ACCESS_TOKEN
-        name: supabase-access-token
       - key: SUPABASE_PROJECT_REF
-        name: supabase-project-ref
+        value: default-project
