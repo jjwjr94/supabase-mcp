@@ -7,10 +7,10 @@
     "url": "git+https://github.com/jjwjr94/supabase-mcp.git"
   },
   "homepage": "https://github.com/jjwjr94/supabase-mcp#readme",
-  "main": "dist/index-http-simple.js",
+  "main": "dist/index-production.js",
   "type": "module",
   "bin": {
-    "supabase-mcp-http": "dist/index-http-simple.js"
+    "supabase-mcp-http": "dist/index-production.js"
   },
   "files": [
     "dist",
@@ -18,9 +18,9 @@
     "README.md"
   ],
   "scripts": {
-    "build": "tsc",
-    "start": "node dist/index-http-simple.js",
-    "start:http": "node dist/index-http-simple.js",
+    "build": "tsc --build",
+    "start": "node dist/index-production.js",
+    "start:http": "node dist/index-production.js",
     "dev": "NODE_ENV=development NODE_OPTIONS='--loader ts-node/esm' node --experimental-specifier-resolution=node index-http-simple.ts",
     "dev:http": "NODE_ENV=development NODE_OPTIONS='--loader ts-node/esm' node --experimental-specifier-resolution=node index-http-simple.ts",
     "dev:secure": "NODE_ENV=development NODE_OPTIONS='--loader ts-node/esm' node --experimental-specifier-resolution=node index-http-secure.ts",
@@ -49,12 +49,6 @@
     "typescript": "^5.7.2"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.11.0",
-    "@mjackson/multipart-parser": "^0.10.1",
-    "common-tags": "^1.8.2",
-    "graphql": "^16.11.0",
-    "openapi-fetch": "^0.13.5",
-    "zod": "^3.24.1",
     "express": "^4.18.2",
     "cors": "^2.8.5",
     "helmet": "^7.1.0"

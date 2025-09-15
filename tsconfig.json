@@ -18,8 +18,7 @@
     "types": ["node"]
   },
   "include": [
-    "index-http-simple.ts",
-    "index-http-secure.ts"
+    "index-production.ts"
   ],
   "exclude": [
     "node_modules",
