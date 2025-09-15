@@ -47,7 +47,7 @@ class SupabaseHttpServer {
       ],
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'x-supabase-token', 'x-project-ref']
+      allowedHeaders: ['Content-Type', 'Authorization', 'x-project-ref']
     }));
     
     this.app.use(express.json({ limit: '10mb' }));
@@ -83,20 +83,8 @@ class SupabaseHttpServer {
       });
 
       try {
-        const supabaseToken = req.headers['x-supabase-token'] as string || process.env.SUPABASE_ACCESS_TOKEN;
-        const projectRef = req.headers['x-project-ref'] as string || process.env.SUPABASE_PROJECT_REF;
-        
-        if (!supabaseToken) {
-          this.sendStreamResponse(res, requestId, 'error', null, 'Supabase access token required');
-          res.end();
-          return;
-        }
-
-        if (!projectRef) {
-          this.sendStreamResponse(res, requestId, 'error', null, 'Supabase project reference required');
-          res.end();
-          return;
-        }
+        // Authentication is handled externally - no auth checks in server code
+        const projectRef = req.headers['x-project-ref'] as string || process.env.SUPABASE_PROJECT_REF || 'default-project';
 
         const { method, params } = req.body;
 
@@ -110,7 +98,8 @@ class SupabaseHttpServer {
           message: `Starting MCP operation: ${method}`,
           method: method,
           params: params,
-          projectRef: projectRef
+          projectRef: projectRef,
+          note: "Authentication handled externally"
         });
 
         let result;
@@ -186,7 +175,7 @@ class SupabaseHttpServer {
                 content: [
                   {
                     type: "text",
-                    text: `Tool '${params.name}' executed successfully with parameters: ${JSON.stringify(params.arguments || {})}\n\nNote: This is a demo implementation. In production, this would connect to your actual Supabase project.`
+                    text: `Tool '${params.name}' executed successfully with parameters: ${JSON.stringify(params.arguments || {})}\n\nNote: This is a demo implementation. Authentication is handled externally, and in production this would connect to your actual Supabase project.`
                   }
                 ]
               }
