@@ -1,13 +1,15 @@
 {
-  "name": "supabase-mcp-minimal",
+  "name": "supabase-mcp-http-server",
   "version": "1.0.0",
-  "description": "Minimal Supabase MCP HTTP Server for Render",
+  "description": "HTTP streaming wrapper for Supabase MCP Server",
   "main": "index-production.js",
   "scripts": {
     "start": "node index-production.js",
     "start:http": "node index-production.js"
   },
   "dependencies": {
+    "@supabase/mcp-server-supabase": "latest",
+    "@modelcontextprotocol/sdk": "latest",
     "express": "^4.18.2",
     "cors": "^2.8.5",
     "helmet": "^7.1.0"
