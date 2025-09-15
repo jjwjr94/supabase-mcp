@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: supabase-mcp-http-server
+    env: node
+    region: oregon
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start:http
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+    secrets:
+      - key: SUPABASE_ACCESS_TOKEN
+        name: supabase-access-token
+      - key: SUPABASE_PROJECT_REF
+        name: supabase-project-ref
