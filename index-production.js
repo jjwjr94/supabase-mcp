@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
+const { Server } = require('@modelcontextprotocol/sdk/server/index.js');
 
 const app = express();
 const port = process.env.PORT || 10000;
@@ -22,6 +23,43 @@ app.get('/health', (req, res) => {
 // Create Supabase MCP Server instance
 let supabaseMcpServer = null;
 
+// Custom transport for HTTP requests
+class HttpTransport {
+  constructor() {
+    this.messageHandlers = [];
+    this.started = false;
+  }
+  
+  async start() {
+    this.started = true;
+    return Promise.resolve();
+  }
+  
+  onMessage(handler) {
+    this.messageHandlers.push(handler);
+  }
+  
+  send(message) {
+    // This will be handled by the HTTP endpoint
+    return Promise.resolve();
+  }
+  
+  async handleRequest(request) {
+    // Process the request through all message handlers
+    for (const handler of this.messageHandlers) {
+      try {
+        const response = await handler(request);
+        if (response) {
+          return response;
+        }
+      } catch (error) {
+        console.error('Message handler error:', error);
+      }
+    }
+    throw new Error('No handler found for request');
+  }
+}
+
 async function initializeSupabaseMcpServer() {
   try {
     // Import the Supabase MCP server and platform using dynamic import for ES modules
@@ -29,17 +67,23 @@ async function initializeSupabaseMcpServer() {
     const { createSupabaseApiPlatform } = await import('@supabase/mcp-server-supabase/platform/api');
     
     // Create the platform with API credentials
-    const platform = await createSupabaseApiPlatform({
+    const platform = createSupabaseApiPlatform({
       accessToken: process.env.SUPABASE_ACCESS_TOKEN
     });
     
     // Create the server with the platform
-    supabaseMcpServer = await createSupabaseMcpServer({
+    supabaseMcpServer = createSupabaseMcpServer({
       platform: platform,
       projectId: process.env.SUPABASE_PROJECT_REF || 'default-project',
       readOnly: process.env.SUPABASE_READ_ONLY === 'true',
       features: process.env.SUPABASE_FEATURES ? process.env.SUPABASE_FEATURES.split(',') : undefined
     });
+    
+    // Create a custom transport
+    const transport = new HttpTransport();
+    
+    // Connect the server to the transport
+    await supabaseMcpServer.connect(transport);
     
     console.log('Supabase MCP Server initialized successfully');
   } catch (error) {
@@ -105,7 +149,7 @@ app.post('/mcp', async (req, res) => {
         params: {}
       };
       
-      result = await supabaseMcpServer.request(listRequest);
+      result = await supabaseMcpServer._requestHandlers.get('tools/list')(listRequest);
       
     } else if (method === 'tools/call') {
       const { name, arguments: toolArguments } = params;
@@ -128,7 +172,7 @@ app.post('/mcp', async (req, res) => {
         }
       };
       
-      result = await supabaseMcpServer.request(callRequest);
+      result = await supabaseMcpServer._requestHandlers.get('tools/call')(callRequest);
       
     } else {
       throw new Error(`Unknown MCP method: ${method}`);

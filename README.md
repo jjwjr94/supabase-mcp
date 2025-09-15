@@ -12,6 +12,26 @@ This is a fork of the [official Supabase MCP Server](https://github.com/supabase
 - **Security**: Helmet.js security middleware and proper CORS configuration
 - **Backward Compatibility**: Legacy REST endpoints for easy integration
 
+## Authentication
+
+The Supabase MCP server requires a **Personal Access Token** from your Supabase account to access the Management API. This is different from your project's API keys.
+
+### Getting Your Supabase Personal Access Token
+
+1. Go to your [Supabase Dashboard](https://supabase.com/dashboard)
+2. Click on your profile/account settings
+3. Navigate to **Access Tokens**
+4. Create a new Personal Access Token
+5. Copy the token and set it as `SUPABASE_ACCESS_TOKEN` in your environment
+
+### Getting Your Project Information
+
+1. Go to your project in the Supabase Dashboard
+2. Navigate to **Settings** > **General**
+3. Copy the **Project Reference** (set as `SUPABASE_PROJECT_REF`)
+4. Copy the **Database Password** (set as `SUPABASE_DB_PASSWORD`)
+5. Copy the **Region** (set as `SUPABASE_REGION`)
+
 ## Quick Start
 
 ### Local Development
@@ -44,8 +64,11 @@ This is a fork of the [official Supabase MCP Server](https://github.com/supabase
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `SUPABASE_ACCESS_TOKEN` | Yes | Your Supabase Personal Access Token |
+| `SUPABASE_ACCESS_TOKEN` | Yes | Your Supabase Personal Access Token (from Account > Access Tokens) |
 | `SUPABASE_PROJECT_REF` | Yes | Your Supabase Project Reference |
+| `SUPABASE_DB_PASSWORD` | No | Your Supabase Database Password |
+| `SUPABASE_REGION` | No | Your Supabase Region (e.g., us-east-1) |
+| `SUPABASE_SERVICE_ROLE_KEY` | No | Your Supabase Service Role Key |
 | `SUPABASE_READ_ONLY` | No | Set to 'true' for read-only mode |
 | `SUPABASE_FEATURES` | No | Comma-separated list of features to enable |
 | `PORT` | No | Server port (default: 3000) |
