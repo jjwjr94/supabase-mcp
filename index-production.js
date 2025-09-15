@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
+const https = require('https');
 
 const app = express();
 const port = process.env.PORT || 10000;
@@ -49,10 +50,68 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Supabase API helper functions
+function makeSupabaseRequest(projectRef, apiKey, endpoint, method = 'GET', data = null) {
+  return new Promise((resolve, reject) => {
+    const url = `https://${projectRef}.supabase.co${endpoint}`;
+    const options = {
+      method: method,
+      headers: {
+        'apikey': apiKey,
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      }
+    };
+
+    if (data) {
+      options.body = JSON.stringify(data);
+    }
+
+    const req = https.request(url, options, (res) => {
+      let responseData = '';
+      res.on('data', (chunk) => {
+        responseData += chunk;
+      });
+      res.on('end', () => {
+        try {
+          const parsed = JSON.parse(responseData);
+          if (res.statusCode >= 200 && res.statusCode < 300) {
+            resolve(parsed);
+          } else {
+            reject(new Error(`Supabase API error: ${parsed.message || responseData}`));
+          }
+        } catch (e) {
+          reject(new Error(`Invalid JSON response: ${responseData}`));
+        }
+      });
+    });
+
+    req.on('error', (error) => {
+      reject(error);
+    });
+
+    if (data) {
+      req.write(JSON.stringify(data));
+    }
+    req.end();
+  });
+}
+
 // Security validation functions
 function validateProjectAccess(projectRef) {
   if (!securityConfig.allowedProjects) return true;
   return securityConfig.allowedProjects.includes(projectRef);
+}
+
+function validateApiKey(apiKey) {
+  if (!apiKey) {
+    throw new Error('API key is required');
+  }
+  // Basic validation - should be a JWT token
+  if (!apiKey.startsWith('eyJ')) {
+    throw new Error('Invalid API key format');
+  }
+  return true;
 }
 
 function validateReadOnlyOperation(toolName) {
@@ -138,60 +197,133 @@ const mcpTools = {
     ]
   }),
 
-  'execute_sql': async (params) => {
+  'execute_sql': async (params, apiKey) => {
     const { query, project_id } = params;
     
     if (!validateProjectAccess(project_id)) {
       throw new Error(`Access denied for project: ${project_id}`);
     }
     
+    validateApiKey(apiKey);
     const sanitizedQuery = sanitizeSqlQuery(query);
     
-    // In a real implementation, this would connect to Supabase
-    // For now, return a mock response
-    return {
-      content: [{
-        type: 'text',
-        text: `SQL query executed successfully:\n\n${sanitizedQuery}\n\nNote: This is a demo implementation. In production, this would connect to your Supabase project: ${project_id}`
-      }]
-    };
+    try {
+      // Execute SQL query via Supabase REST API
+      const result = await makeSupabaseRequest(
+        project_id, 
+        apiKey, 
+        `/rest/v1/rpc/execute_sql`, 
+        'POST', 
+        { query: sanitizedQuery }
+      );
+      
+      return {
+        content: [{
+          type: 'text',
+          text: `SQL query executed successfully:\n\n${sanitizedQuery}\n\nResult: ${JSON.stringify(result, null, 2)}`
+        }]
+      };
+    } catch (error) {
+      // Fallback: try direct SQL execution via REST API
+      try {
+        const result = await makeSupabaseRequest(
+          project_id, 
+          apiKey, 
+          `/rest/v1/`, 
+          'POST', 
+          { query: sanitizedQuery }
+        );
+        
+        return {
+          content: [{
+            type: 'text',
+            text: `SQL query executed successfully:\n\n${sanitizedQuery}\n\nResult: ${JSON.stringify(result, null, 2)}`
+          }]
+        };
+      } catch (fallbackError) {
+        throw new Error(`SQL execution failed: ${fallbackError.message}`);
+      }
+    }
   },
 
-  'list_tables': async (params) => {
+  'list_tables': async (params, apiKey) => {
     const { project_id } = params;
     
     if (!validateProjectAccess(project_id)) {
       throw new Error(`Access denied for project: ${project_id}`);
     }
     
-    // Mock table list
-    return {
-      content: [{
-        type: 'text',
-        text: `Tables in project ${project_id}:\n\n- users\n- posts\n- comments\n- categories\n\nNote: This is a demo implementation. In production, this would query your actual Supabase database.`
-      }]
-    };
+    validateApiKey(apiKey);
+    
+    try {
+      // Get table information from Supabase
+      const result = await makeSupabaseRequest(
+        project_id, 
+        apiKey, 
+        `/rest/v1/`, 
+        'GET'
+      );
+      
+      // Extract table names from the response
+      const tables = result.map ? result.map(item => item.table_name || item.name).filter(Boolean) : [];
+      
+      return {
+        content: [{
+          type: 'text',
+          text: `Tables in project ${project_id}:\n\n${tables.length > 0 ? tables.map(t => `- ${t}`).join('\n') : 'No tables found or accessible with current permissions'}`
+        }]
+      };
+    } catch (error) {
+      // Fallback: return a basic message
+      return {
+        content: [{
+          type: 'text',
+          text: `Could not retrieve table list for project ${project_id}. Error: ${error.message}`
+        }]
+      };
+    }
   },
 
-  'describe_table': async (params) => {
+  'describe_table': async (params, apiKey) => {
     const { table_name, project_id } = params;
     
     if (!validateProjectAccess(project_id)) {
       throw new Error(`Access denied for project: ${project_id}`);
     }
     
-    // Mock table description
-    return {
-      content: [{
-        type: 'text',
-        text: `Table: ${table_name}\nProject: ${project_id}\n\nColumns:\n- id (uuid, primary key)\n- created_at (timestamp)\n- updated_at (timestamp)\n- name (text)\n- email (text)\n\nNote: This is a demo implementation. In production, this would query your actual Supabase table schema.`
-      }]
-    };
+    validateApiKey(apiKey);
+    
+    try {
+      // Get table schema information from Supabase
+      const result = await makeSupabaseRequest(
+        project_id, 
+        apiKey, 
+        `/rest/v1/${table_name}?limit=1`, 
+        'GET'
+      );
+      
+      // Get column information from the first row or metadata
+      const columns = result && result.length > 0 ? Object.keys(result[0]) : [];
+      
+      return {
+        content: [{
+          type: 'text',
+          text: `Table: ${table_name}\nProject: ${project_id}\n\nColumns:\n${columns.length > 0 ? columns.map(col => `- ${col}`).join('\n') : 'No columns found or table not accessible'}`
+        }]
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text',
+          text: `Could not retrieve schema for table ${table_name} in project ${project_id}. Error: ${error.message}`
+        }]
+      };
+    }
   }
 };
 
 // MCP endpoint with streaming support
-app.post('/mcp', (req, res) => {
+app.post('/mcp', async (req, res) => {
   const requestId = req.body.id || `req_${Date.now()}`;
   
   // Set up Server-Sent Events
@@ -206,12 +338,24 @@ app.post('/mcp', (req, res) => {
   try {
     const { method, params } = req.body;
     const projectRef = req.headers['x-project-ref'] || process.env.SUPABASE_PROJECT_REF || 'default-project';
+    const apiKey = req.headers['x-supabase-key'];
 
     if (!method) {
       res.write(`data: ${JSON.stringify({
         id: requestId,
         type: 'error',
         error: 'MCP method is required'
+      })}\n\n`);
+      res.end();
+      return;
+    }
+
+    // Validate API key for tool calls
+    if (method === 'tools/call' && !apiKey) {
+      res.write(`data: ${JSON.stringify({
+        id: requestId,
+        type: 'error',
+        error: 'API key is required for tool calls'
       })}\n\n`);
       res.end();
       return;
@@ -226,7 +370,8 @@ app.post('/mcp', (req, res) => {
         method: method,
         params: params,
         projectRef: projectRef,
-        note: "Authentication handled externally"
+        hasApiKey: !!apiKey,
+        note: "API key authentication enabled"
       }
     })}\n\n`);
 
@@ -247,7 +392,7 @@ app.post('/mcp', (req, res) => {
       }
       
       if (mcpTools[name]) {
-        result = mcpTools[name](toolArguments);
+        result = await mcpTools[name](toolArguments, apiKey);
       } else {
         throw new Error(`Unknown tool: ${name}`);
       }
