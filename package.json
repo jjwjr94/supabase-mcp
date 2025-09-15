@@ -8,6 +8,7 @@
   },
   "homepage": "https://github.com/jjwjr94/supabase-mcp#readme",
   "main": "dist/index-production.js",
+  "type": "module",
   "bin": {
     "supabase-mcp-http": "dist/index-production.js"
   },
