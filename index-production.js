@@ -141,7 +141,17 @@ app.post('/mcp', async (req, res) => {
     // Handle different MCP methods
     let result;
     
-    if (method === 'tools/list') {
+    if (method === 'initialize') {
+      const initRequest = {
+        jsonrpc: '2.0',
+        id: requestId,
+        method: 'initialize',
+        params: params || {}
+      };
+      
+      result = await supabaseMcpServer._requestHandlers.get('initialize')(initRequest);
+      
+    } else if (method === 'tools/list') {
       const listRequest = {
         jsonrpc: '2.0',
         id: requestId,
