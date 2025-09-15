@@ -1,0 +1,10 @@
+{
+  "name": "supabase-mcp-test",
+  "version": "1.0.0",
+  "description": "Simple test for Render deployment",
+  "main": "test-simple.js",
+  "scripts": {
+    "start": "node test-simple.js"
+  },
+  "dependencies": {}
+}
