@@ -176,24 +176,67 @@ app.post('/mcp', async (req, res) => {
       throw new Error(`Unknown MCP method: ${method}`);
     }
 
-    // Clean the result for n8n consumption (remove security wrappers)
+    // For n8n compatibility, return a simplified response format
     let cleanedResult = result;
     if (result && result.content && result.content[0] && result.content[0].text) {
       const text = result.content[0].text;
-      // Extract JSON data from the security wrapper
-      const dataMatch = text.match(/\[{.*?}\]/);
-      if (dataMatch) {
+      
+      // Extract the JSON data from the security wrapper
+      // Look for the pattern: [{"key":"value",...}] within the text
+      const jsonMatch = text.match(/\[\\{.*?\\}\]/);
+      if (jsonMatch) {
         try {
-          const cleanData = JSON.parse(dataMatch[0]);
+          // Unescape the JSON step by step
+          let jsonStr = jsonMatch[0];
+          jsonStr = jsonStr.replace(/\\\\\\/g, '\\'); // Fix triple-escaped backslashes
+          jsonStr = jsonStr.replace(/\\\\/g, '\\');   // Fix double-escaped backslashes
+          jsonStr = jsonStr.replace(/\\"/g, '"');     // Fix escaped quotes
+          
+          const cleanData = JSON.parse(jsonStr);
+          
+          // Return in a simple format for n8n
           cleanedResult = {
-            content: [{
-              type: "text",
-              text: JSON.stringify(cleanData, null, 2)
-            }]
+            success: true,
+            data: cleanData,
+            message: "SQL query executed successfully"
           };
         } catch (e) {
-          // If parsing fails, return original result
-          console.log('Could not parse SQL result, returning original format');
+          // If parsing fails, return error format
+          cleanedResult = {
+            success: false,
+            error: "Failed to parse SQL result: " + e.message,
+            raw_text: text
+          };
+        }
+      } else {
+        // Try a different pattern - look for the actual JSON structure
+        const altMatch = text.match(/\[\\{.*?\\}\]/);
+        if (altMatch) {
+          try {
+            let jsonStr = altMatch[0];
+            jsonStr = jsonStr.replace(/\\\\/g, '\\');
+            jsonStr = jsonStr.replace(/\\"/g, '"');
+            
+            const cleanData = JSON.parse(jsonStr);
+            cleanedResult = {
+              success: true,
+              data: cleanData,
+              message: "SQL query executed successfully"
+            };
+          } catch (e) {
+            cleanedResult = {
+              success: false,
+              error: "Failed to parse SQL result: " + e.message,
+              raw_text: text
+            };
+          }
+        } else {
+          // No data found, return error format
+          cleanedResult = {
+            success: false,
+            error: "No data found in SQL result",
+            raw_text: text
+          };
         }
       }
     }
