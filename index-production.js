@@ -20,8 +20,7 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Create Supabase MCP Server instance
-let supabaseMcpServer = null;
+// Note: Server instances are created per request for security
 
 // Custom transport for HTTP requests
 class HttpTransport {
@@ -60,32 +59,27 @@ class HttpTransport {
   }
 }
 
-async function initializeSupabaseMcpServer() {
+async function initializeSupabaseMcpServer(accessToken, projectRef) {
   try {
     // Import the Supabase MCP server and platform using dynamic import for ES modules
     const { createSupabaseMcpServer } = await import('@supabase/mcp-server-supabase');
     const { createSupabaseApiPlatform } = await import('@supabase/mcp-server-supabase/platform/api');
     
-    // Create the platform with API credentials
+    // Create the platform with API credentials from header
     const platform = createSupabaseApiPlatform({
-      accessToken: process.env.SUPABASE_ACCESS_TOKEN
+      accessToken: accessToken
     });
     
     // Create the server with the platform
-    supabaseMcpServer = createSupabaseMcpServer({
+    const server = createSupabaseMcpServer({
       platform: platform,
-      projectId: process.env.SUPABASE_PROJECT_REF || 'default-project',
+      projectId: projectRef || process.env.SUPABASE_PROJECT_REF || 'default-project',
       readOnly: process.env.SUPABASE_READ_ONLY === 'true',
       features: process.env.SUPABASE_FEATURES ? process.env.SUPABASE_FEATURES.split(',') : undefined
     });
     
-    // Create a custom transport
-    const transport = new HttpTransport();
-    
-    // Connect the server to the transport
-    await supabaseMcpServer.connect(transport);
-    
     console.log('Supabase MCP Server initialized successfully');
+    return server;
   } catch (error) {
     console.error('Failed to initialize Supabase MCP Server:', error);
     throw error;
@@ -95,6 +89,35 @@ async function initializeSupabaseMcpServer() {
 // MCP endpoint with streaming support
 app.post('/mcp', async (req, res) => {
   const requestId = req.body.id || `req_${Date.now()}`;
+  const projectRef = req.headers['x-project-ref'] || process.env.SUPABASE_PROJECT_REF || 'default-project';
+  const accessToken = req.headers['x-supabase-key']; // Supabase Personal Access Token
+
+  // Validate required headers
+  if (!accessToken) {
+    res.writeHead(400, {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*'
+    });
+    res.end(JSON.stringify({
+      id: requestId,
+      type: 'error',
+      error: 'x-supabase-key header is required (Supabase Personal Access Token)'
+    }));
+    return;
+  }
+
+  if (!projectRef) {
+    res.writeHead(400, {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*'
+    });
+    res.end(JSON.stringify({
+      id: requestId,
+      type: 'error',
+      error: 'x-project-ref header is required'
+    }));
+    return;
+  }
 
   // Set up Server-Sent Events
   res.writeHead(200, {
@@ -107,8 +130,6 @@ app.post('/mcp', async (req, res) => {
 
   try {
     const { method, params } = req.body;
-    const projectRef = req.headers['x-project-ref'] || process.env.SUPABASE_PROJECT_REF || 'default-project';
-    const apiKey = req.headers['x-supabase-key'];
 
     if (!method) {
       res.write(`data: ${JSON.stringify({
@@ -120,10 +141,8 @@ app.post('/mcp', async (req, res) => {
       return;
     }
 
-    // Initialize server if not already done
-    if (!supabaseMcpServer) {
-      await initializeSupabaseMcpServer();
-    }
+    // Create a new server instance for each request with the provided credentials
+    const supabaseMcpServer = await initializeSupabaseMcpServer(accessToken, projectRef);
 
     // Send initial response
     res.write(`data: ${JSON.stringify({
@@ -134,7 +153,7 @@ app.post('/mcp', async (req, res) => {
         method: method,
         params: params,
         projectRef: projectRef,
-        hasApiKey: !!apiKey
+        hasAccessToken: !!accessToken
       }
     })}\n\n`);
 

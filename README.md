@@ -22,7 +22,14 @@ The Supabase MCP server requires a **Personal Access Token** from your Supabase 
 2. Click on your profile/account settings
 3. Navigate to **Access Tokens**
 4. Create a new Personal Access Token
-5. Copy the token and set it as `SUPABASE_ACCESS_TOKEN` in your environment
+5. Copy the token and pass it via the `x-supabase-key` header in your requests
+
+### Security Design
+
+- **No stored credentials**: The server doesn't store any access tokens
+- **Per-request authentication**: Each request must include the PAT in the header
+- **Multi-tenant support**: Different clients can use different PATs
+- **Better security**: Tokens are not persisted in environment variables
 
 ### Getting Your Project Information
 
@@ -64,14 +71,20 @@ The Supabase MCP server requires a **Personal Access Token** from your Supabase 
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `SUPABASE_ACCESS_TOKEN` | Yes | Your Supabase Personal Access Token (from Account > Access Tokens) |
-| `SUPABASE_PROJECT_REF` | Yes | Your Supabase Project Reference |
+| `SUPABASE_PROJECT_REF` | No | Default Supabase Project Reference (can be overridden by header) |
 | `SUPABASE_DB_PASSWORD` | No | Your Supabase Database Password |
 | `SUPABASE_REGION` | No | Your Supabase Region (e.g., us-east-1) |
 | `SUPABASE_SERVICE_ROLE_KEY` | No | Your Supabase Service Role Key |
 | `SUPABASE_READ_ONLY` | No | Set to 'true' for read-only mode |
 | `SUPABASE_FEATURES` | No | Comma-separated list of features to enable |
 | `PORT` | No | Server port (default: 3000) |
+
+### Required Headers
+
+| Header | Required | Description |
+|--------|----------|-------------|
+| `x-supabase-key` | Yes | Your Supabase Personal Access Token |
+| `x-project-ref` | Yes | Your Supabase Project Reference |
 
 ## API Endpoints
 
