@@ -181,18 +181,16 @@ app.post('/mcp', async (req, res) => {
     if (result && result.content && result.content[0] && result.content[0].text) {
       const text = result.content[0].text;
       
-      // Extract the JSON data from the security wrapper
-      // Look for the pattern: [{"key":"value",...}] within the text
-      const jsonMatch = text.match(/\[\\{.*?\\}\]/);
-      if (jsonMatch) {
+      // Simple approach: find the JSON array in the text
+      const startIndex = text.indexOf('[');
+      const endIndex = text.lastIndexOf(']') + 1;
+      
+      if (startIndex !== -1 && endIndex > startIndex) {
         try {
-          // Unescape the JSON step by step
-          let jsonStr = jsonMatch[0];
-          jsonStr = jsonStr.replace(/\\\\\\/g, '\\'); // Fix triple-escaped backslashes
-          jsonStr = jsonStr.replace(/\\\\/g, '\\');   // Fix double-escaped backslashes
-          jsonStr = jsonStr.replace(/\\"/g, '"');     // Fix escaped quotes
-          
-          const cleanData = JSON.parse(jsonStr);
+          const jsonString = text.substring(startIndex, endIndex);
+          // Unescape the JSON
+          const cleanJson = jsonString.replace(/\\"/g, '"');
+          const cleanData = JSON.parse(cleanJson);
           
           // Return in a simple format for n8n
           cleanedResult = {
@@ -209,35 +207,12 @@ app.post('/mcp', async (req, res) => {
           };
         }
       } else {
-        // Try a different pattern - look for the actual JSON structure
-        const altMatch = text.match(/\[\\{.*?\\}\]/);
-        if (altMatch) {
-          try {
-            let jsonStr = altMatch[0];
-            jsonStr = jsonStr.replace(/\\\\/g, '\\');
-            jsonStr = jsonStr.replace(/\\"/g, '"');
-            
-            const cleanData = JSON.parse(jsonStr);
-            cleanedResult = {
-              success: true,
-              data: cleanData,
-              message: "SQL query executed successfully"
-            };
-          } catch (e) {
-            cleanedResult = {
-              success: false,
-              error: "Failed to parse SQL result: " + e.message,
-              raw_text: text
-            };
-          }
-        } else {
-          // No data found, return error format
-          cleanedResult = {
-            success: false,
-            error: "No data found in SQL result",
-            raw_text: text
-          };
-        }
+        // No data found, return error format
+        cleanedResult = {
+          success: false,
+          error: "No data found in SQL result",
+          raw_text: text
+        };
       }
     }
 
