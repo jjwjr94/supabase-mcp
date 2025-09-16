@@ -94,68 +94,37 @@ app.post('/mcp', async (req, res) => {
 
   // Validate required headers
   if (!accessToken) {
-    res.writeHead(400, {
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*'
-    });
-    res.end(JSON.stringify({
+    res.status(400).json({
       id: requestId,
       type: 'error',
       error: 'x-supabase-key header is required (Supabase Personal Access Token)'
-    }));
+    });
     return;
   }
 
   if (!projectRef) {
-    res.writeHead(400, {
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*'
-    });
-    res.end(JSON.stringify({
+    res.status(400).json({
       id: requestId,
       type: 'error',
       error: 'x-project-ref header is required'
-    }));
+    });
     return;
   }
-
-  // Set up Server-Sent Events
-  res.writeHead(200, {
-    'Content-Type': 'text/event-stream',
-    'Cache-Control': 'no-cache',
-    'Connection': 'keep-alive',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Cache-Control, x-project-ref, x-supabase-key'
-  });
 
   try {
     const { method, params } = req.body;
 
     if (!method) {
-      res.write(`data: ${JSON.stringify({
+      res.status(400).json({
         id: requestId,
         type: 'error',
         error: 'MCP method is required'
-      })}\n\n`);
-      res.end();
+      });
       return;
     }
 
     // Create a new server instance for each request with the provided credentials
     const supabaseMcpServer = await initializeSupabaseMcpServer(accessToken, projectRef);
-
-    // Send initial response
-    res.write(`data: ${JSON.stringify({
-      id: requestId,
-      type: 'data',
-      data: {
-        message: `Starting MCP operation: ${method}`,
-        method: method,
-        params: params,
-        projectRef: projectRef,
-        hasAccessToken: !!accessToken
-      }
-    })}\n\n`);
 
     // Handle different MCP methods
     let result;
@@ -207,27 +176,19 @@ app.post('/mcp', async (req, res) => {
       throw new Error(`Unknown MCP method: ${method}`);
     }
 
-    // Send result
-    res.write(`data: ${JSON.stringify({
+    // Send result as regular JSON response
+    res.json({
       id: requestId,
       result: result
-    })}\n\n`);
-
-    // Send completion
-    res.write(`data: ${JSON.stringify({
-      id: requestId,
-      type: 'complete'
-    })}\n\n`);
+    });
 
   } catch (error) {
     console.error('MCP Error:', error);
-    res.write(`data: ${JSON.stringify({
+    res.status(500).json({
       id: requestId,
       type: 'error',
       error: error.message
-    })}\n\n`);
-  } finally {
-    res.end();
+    });
   }
 });
 
