@@ -176,10 +176,32 @@ app.post('/mcp', async (req, res) => {
       throw new Error(`Unknown MCP method: ${method}`);
     }
 
+    // Clean the result for n8n consumption (remove security wrappers)
+    let cleanedResult = result;
+    if (result && result.content && result.content[0] && result.content[0].text) {
+      const text = result.content[0].text;
+      // Extract JSON data from the security wrapper
+      const dataMatch = text.match(/\[{.*?}\]/);
+      if (dataMatch) {
+        try {
+          const cleanData = JSON.parse(dataMatch[0]);
+          cleanedResult = {
+            content: [{
+              type: "text",
+              text: JSON.stringify(cleanData, null, 2)
+            }]
+          };
+        } catch (e) {
+          // If parsing fails, return original result
+          console.log('Could not parse SQL result, returning original format');
+        }
+      }
+    }
+
     // Send result as regular JSON response
     res.json({
       id: requestId,
-      result: result
+      result: cleanedResult
     });
 
   } catch (error) {
