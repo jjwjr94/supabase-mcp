@@ -59,29 +59,167 @@ class HttpTransport {
   }
 }
 
+// Custom Supabase MCP Server using Management API without security wrappers
+class CustomSupabaseMcpServer {
+  constructor(accessToken, projectRef) {
+    this.accessToken = accessToken;
+    this.projectRef = projectRef;
+    this.managementApiUrl = 'https://api.supabase.com/v1';
+  }
+
+  async executeSql(query) {
+    try {
+      // Use Management API SQL execution endpoint with PAT
+      const response = await fetch(`${this.managementApiUrl}/projects/${this.projectRef}/database/query`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ query })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Management API error: ${response.status} - ${errorText}`);
+      }
+
+      const data = await response.json();
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify(data, null, 2)
+        }]
+      };
+    } catch (error) {
+      throw new Error(`SQL execution failed: ${error.message}`);
+    }
+  }
+
+  async listTables() {
+    try {
+      // Use Management API SQL query to list tables
+      const query = "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name;";
+      const response = await fetch(`${this.managementApiUrl}/projects/${this.projectRef}/database/query`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ query })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Management API error: ${response.status} - ${errorText}`);
+      }
+
+      const data = await response.json();
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify(data, null, 2)
+        }]
+      };
+    } catch (error) {
+      throw new Error(`Failed to list tables: ${error.message}`);
+    }
+  }
+
+  async describeTable(tableName) {
+    try {
+      // Use Management API SQL query to describe table
+      const query = `SELECT column_name, data_type, is_nullable, column_default 
+                     FROM information_schema.columns 
+                     WHERE table_name = '${tableName}' AND table_schema = 'public' 
+                     ORDER BY ordinal_position;`;
+      const response = await fetch(`${this.managementApiUrl}/projects/${this.projectRef}/database/query`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ query })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Management API error: ${response.status} - ${errorText}`);
+      }
+
+      const data = await response.json();
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify(data, null, 2)
+        }]
+      };
+    } catch (error) {
+      throw new Error(`Failed to describe table: ${error.message}`);
+    }
+  }
+
+  // Mock the MCP server interface
+  _requestHandlers = new Map([
+    ['initialize', () => ({ protocolVersion: '2024-11-05', capabilities: {} })],
+    ['tools/list', () => ({
+      tools: [
+        {
+          name: 'execute_sql',
+          description: 'Execute SQL queries on the Supabase database',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              query: { type: 'string', description: 'SQL query to execute' }
+            },
+            required: ['query']
+          }
+        },
+        {
+          name: 'list_tables',
+          description: 'List all tables in the database',
+          inputSchema: {
+            type: 'object',
+            properties: {}
+          }
+        },
+        {
+          name: 'describe_table',
+          description: 'Get schema information for a specific table',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              table_name: { type: 'string', description: 'Name of the table to describe' }
+            },
+            required: ['table_name']
+          }
+        }
+      ]
+    })],
+    ['tools/call', async (request) => {
+      const { name, arguments: args } = request.params;
+      
+      switch (name) {
+        case 'execute_sql':
+          return await this.executeSql(args.query);
+        case 'list_tables':
+          return await this.listTables();
+        case 'describe_table':
+          return await this.describeTable(args.table_name);
+        default:
+          throw new Error(`Unknown tool: ${name}`);
+      }
+    }]
+  ]);
+}
+
 async function initializeSupabaseMcpServer(accessToken, projectRef) {
   try {
-    // Import the Supabase MCP server and platform using dynamic import for ES modules
-    const { createSupabaseMcpServer } = await import('@supabase/mcp-server-supabase');
-    const { createSupabaseApiPlatform } = await import('@supabase/mcp-server-supabase/platform/api');
-    
-    // Create the platform with API credentials from header
-    const platform = createSupabaseApiPlatform({
-      accessToken: accessToken
-    });
-    
-    // Create the server with the platform
-    const server = createSupabaseMcpServer({
-      platform: platform,
-      projectId: projectRef || process.env.SUPABASE_PROJECT_REF || 'default-project',
-      readOnly: process.env.SUPABASE_READ_ONLY === 'true',
-      features: process.env.SUPABASE_FEATURES ? process.env.SUPABASE_FEATURES.split(',') : undefined
-    });
-    
-    console.log('Supabase MCP Server initialized successfully');
+    const server = new CustomSupabaseMcpServer(accessToken, projectRef);
+    console.log('Custom Supabase MCP Server initialized successfully');
     return server;
   } catch (error) {
-    console.error('Failed to initialize Supabase MCP Server:', error);
+    console.error('Failed to initialize Custom Supabase MCP Server:', error);
     throw error;
   }
 }
@@ -176,42 +314,25 @@ app.post('/mcp', async (req, res) => {
       throw new Error(`Unknown MCP method: ${method}`);
     }
 
-    // For n8n compatibility, return a simplified response format
+    // For n8n compatibility, return clean JSON directly from Management API
     let cleanedResult = result;
     if (result && result.content && result.content[0] && result.content[0].text) {
-      const text = result.content[0].text;
-      
-      // Simple approach: find the JSON array in the text
-      const startIndex = text.indexOf('[');
-      const endIndex = text.lastIndexOf(']') + 1;
-      
-      if (startIndex !== -1 && endIndex > startIndex) {
-        try {
-          const jsonString = text.substring(startIndex, endIndex);
-          // Unescape the JSON
-          const cleanJson = jsonString.replace(/\\"/g, '"');
-          const cleanData = JSON.parse(cleanJson);
-          
-          // Return in a simple format for n8n
-          cleanedResult = {
-            success: true,
-            data: cleanData,
-            message: "SQL query executed successfully"
-          };
-        } catch (e) {
-          // If parsing fails, return error format
-          cleanedResult = {
-            success: false,
-            error: "Failed to parse SQL result: " + e.message,
-            raw_text: text
-          };
-        }
-      } else {
-        // No data found, return error format
+      try {
+        // Parse the clean JSON from Management API (no security wrappers)
+        const cleanData = JSON.parse(result.content[0].text);
+        
+        // Return in a simple format for n8n
+        cleanedResult = {
+          success: true,
+          data: cleanData,
+          message: "Query executed successfully"
+        };
+      } catch (e) {
+        // If parsing fails, return error format
         cleanedResult = {
           success: false,
-          error: "No data found in SQL result",
-          raw_text: text
+          error: "Failed to parse response: " + e.message,
+          raw_text: result.content[0].text
         };
       }
     }
